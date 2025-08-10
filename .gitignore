@@ -1,0 +1,41 @@
+# Environment and data
+.env
+data
+
+# Lambda artifacts
+lambdas/*.zip
+lambdas/coverage/
+
+# Terraform
+.terraform
+terraform.tfstate
+terraform.tfstate.backup
+.terraform.lock.hcl
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+*.tgz
+
+# Jest
+coverage/
+.jest-cache/
+
+# IDE - PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Logs
+logs
+*.log
