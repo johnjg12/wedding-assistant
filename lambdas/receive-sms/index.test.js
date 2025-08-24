@@ -1,127 +1,84 @@
-const { handler } = require('./index');
+const { handler } = require("./index");
+const { mockClient } = require("aws-sdk-client-mock");
+const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
 
-describe('receive-sms Lambda Function', () => {
-    let consoleSpy;
+const ddbMock = mockClient(DynamoDBDocumentClient);
 
+describe("receive-sms Lambda Function", () => {
     beforeEach(() => {
-        consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+        ddbMock.reset();
+        process.env.DYNAMODB_TABLE_NAME = "rsvp-table";
+        process.env.AWS_REGION = "us-east-1";
     });
 
-    afterEach(() => {
-        consoleSpy.mockRestore();
-    });
-
-    test('should process SNS message successfully', async () => {
-        const testMessage = 'Yes, I will be attending the wedding!';
-        const event = {
-            Records: [{
+    const createSnsEvent = (message, phoneNumber = "+1234567890") => ({
+        Records: [
+            {
                 Sns: {
-                    Message: testMessage
-                }
-            }]
-        };
+                    Message: JSON.stringify({
+                        originationNumber: phoneNumber,
+                        messageBody: message,
+                    }),
+                },
+            },
+        ],
+    });
+
+    test('should save "Attending" status for "yes" message', async () => {
+        const event = createSnsEvent("Yes, I will be there!");
+        ddbMock.on(PutCommand).resolves({});
 
         const result = await handler(event);
 
         expect(result.statusCode).toBe(200);
-        expect(JSON.parse(result.body)).toEqual({
-            message: 'Message received'
+        expect(JSON.parse(result.body).message).toBe("RSVP received");
+        expect(ddbMock.calls()).toHaveLength(1);
+        expect(ddbMock.call(0).args[0].input).toEqual({
+            TableName: "rsvp-table",
+            Item: {
+                phoneNumber: "+1234567890",
+                rsvpStatus: "Attending",
+                message: "Yes, I will be there!",
+            },
         });
-
-        // Verify message was logged
-        expect(consoleSpy).toHaveBeenCalledWith('Received message:', testMessage);
     });
 
-    test('should handle RSVP confirmation message', async () => {
-        const rsvpMessage = 'YES - John and Jane will attend';
-        const event = {
-            Records: [{
-                Sns: {
-                    Message: rsvpMessage
-                }
-            }]
-        };
+    test('should save "Declined" status for "no" message', async () => {
+        const event = createSnsEvent("Sorry, I cannot make it.");
+        ddbMock.on(PutCommand).resolves({});
 
         const result = await handler(event);
 
         expect(result.statusCode).toBe(200);
-        expect(consoleSpy).toHaveBeenCalledWith('Received message:', rsvpMessage);
+        expect(JSON.parse(result.body).message).toBe("RSVP received");
+        expect(ddbMock.calls()).toHaveLength(1);
+        expect(ddbMock.call(0).args[0].input).toEqual({
+            TableName: "rsvp-table",
+            Item: {
+                phoneNumber: "+1234567890",
+                rsvpStatus: "Declined",
+                message: "Sorry, I cannot make it.",
+            },
+        });
     });
 
-    test('should handle RSVP decline message', async () => {
-        const declineMessage = 'Sorry, we cannot make it to the wedding';
-        const event = {
-            Records: [{
-                Sns: {
-                    Message: declineMessage
-                }
-            }]
-        };
+    test("should not save to DynamoDB for an unclear message", async () => {
+        const event = createSnsEvent("What is the dress code?");
 
         const result = await handler(event);
 
         expect(result.statusCode).toBe(200);
-        expect(consoleSpy).toHaveBeenCalledWith('Received message:', declineMessage);
+        expect(JSON.parse(result.body).message).toBe("RSVP status unclear");
+        expect(ddbMock.calls()).toHaveLength(0);
     });
 
-    test('should handle question from guest', async () => {
-        const questionMessage = 'What time does the ceremony start?';
-        const event = {
-            Records: [{
-                Sns: {
-                    Message: questionMessage
-                }
-            }]
-        };
+    test("should return 500 if DynamoDB put fails", async () => {
+        const event = createSnsEvent("Yes");
+        ddbMock.on(PutCommand).rejects(new Error("DynamoDB error"));
 
         const result = await handler(event);
 
-        expect(result.statusCode).toBe(200);
-        expect(consoleSpy).toHaveBeenCalledWith('Received message:', questionMessage);
-    });
-
-    test('should handle empty message', async () => {
-        const event = {
-            Records: [{
-                Sns: {
-                    Message: ''
-                }
-            }]
-        };
-
-        const result = await handler(event);
-
-        expect(result.statusCode).toBe(200);
-        expect(consoleSpy).toHaveBeenCalledWith('Received message:', '');
-    });
-
-    test('should handle message with special characters', async () => {
-        const specialMessage = 'Can\'t wait! 🎉💒 See you at 3:30 PM';
-        const event = {
-            Records: [{
-                Sns: {
-                    Message: specialMessage
-                }
-            }]
-        };
-
-        const result = await handler(event);
-
-        expect(result.statusCode).toBe(200);
-        expect(consoleSpy).toHaveBeenCalledWith('Received message:', specialMessage);
-    });
-
-    test('should handle malformed event structure', async () => {
-        const event = {
-            Records: [{}]
-        };
-
-        await expect(handler(event)).rejects.toThrow();
-    });
-
-    test('should handle missing Records array', async () => {
-        const event = {};
-
-        await expect(handler(event)).rejects.toThrow();
+        expect(result.statusCode).toBe(500);
+        expect(JSON.parse(result.body).message).toBe("Error processing RSVP");
     });
 });

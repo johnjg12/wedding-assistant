@@ -69,18 +69,18 @@ Handles outbound SMS messages via AWS SNS.
 
 ### receive-sms
 
-Processes incoming SMS messages received via SNS.
+Processes incoming SMS messages received via SNS and stores RSVP status in DynamoDB.
 
 **Trigger**: SNS message (from phone number replies)
 **Input**: SNS event containing the SMS message
 **Output**: Processing confirmation
 
-**Current Status**: Logs incoming messages. Ready for custom processing logic (RSVP handling, guest questions, etc.)
+**Current Status**: Parses incoming messages for keywords like "yes" or "no" and stores the RSVP status ("Attending" or "Declined") in a DynamoDB table.
 
 ## Dependencies
 
 - **Runtime**: Node.js 18.x
-- **AWS SDK**: `@aws-sdk/client-sns` v3.598.0
+- **AWS SDK**: `@aws-sdk/client-sns` v3.598.0, `@aws-sdk/lib-dynamodb` v3.598.0
 - **Testing**: Jest v30.0.5
 - **Mocking**: `aws-sdk-client-mock` v4.1.0
 
@@ -140,19 +140,9 @@ The `receive-sms` function automatically processes incoming messages. Current im
 
 ## Development
 
-### Adding Custom Reply Processing
+### Custom Reply Processing
 
-To add custom logic for processing guest replies, modify `/lambdas/receive-sms/index.js`:
-
-```javascript
-// Example: RSVP processing
-const message = snsMessage.toLowerCase();
-if (message.includes('yes') || message.includes('attending')) {
-    // Handle RSVP confirmation
-} else if (message.includes('no') || message.includes('cannot')) {
-    // Handle RSVP decline
-}
-```
+The `receive-sms` function processes guest replies and stores their RSVP status in a DynamoDB table. The logic in `/lambdas/receive-sms/index.js` can be customized to handle different keywords or store additional information.
 
 ### Local Testing
 

@@ -37,16 +37,51 @@ resource "aws_iam_role_policy_attachment" "sns_publish_policy_attachment" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSNSFullAccess"
 }
 
+resource "aws_iam_policy" "dynamodb_write_policy" {
+  name        = "DynamoDBWritePolicy"
+  description = "Policy to allow writing to DynamoDB table"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = [
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem"
+        ],
+        Effect   = "Allow",
+        Resource = aws_dynamodb_table.rsvp_table.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "dynamodb_write_policy_attachment" {
+  role       = aws_iam_role.lambda_exec_role.name
+  policy_arn = aws_iam_policy.dynamodb_write_policy.arn
+}
+
+resource "aws_dynamodb_table" "rsvp_table" {
+  name           = "rsvp-table"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "phoneNumber"
+
+  attribute {
+    name = "phoneNumber"
+    type = "S"
+  }
+}
+
 resource "aws_sns_topic" "sms_topic" {
   name = "sms-topic"
 }
 
 resource "aws_lambda_function" "send_sms_lambda" {
-  filename      = "../lambdas/send-sms.zip"
-  function_name = "send-sms"
-  role          = aws_iam_role.lambda_exec_role.arn
-  handler       = "index.handler"
-  runtime       = "nodejs20.x"
+  filename         = "../lambdas/send-sms.zip"
+  function_name    = "send-sms"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "index.handler"
+  runtime          = "nodejs20.x"
   source_code_hash = filebase64sha256("../lambdas/send-sms.zip")
 
   environment {
@@ -57,12 +92,18 @@ resource "aws_lambda_function" "send_sms_lambda" {
 }
 
 resource "aws_lambda_function" "receive_sms_lambda" {
-  filename      = "../lambdas/receive-sms.zip"
-  function_name = "receive-sms"
-  role          = aws_iam_role.lambda_exec_role.arn
-  handler       = "index.handler"
-  runtime       = "nodejs20.x"
+  filename         = "../lambdas/receive-sms.zip"
+  function_name    = "receive-sms"
+  role             = aws_iam_role.lambda_exec_role.arn
+  handler          = "index.handler"
+  runtime          = "nodejs20.x"
   source_code_hash = filebase64sha256("../lambdas/receive-sms.zip")
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE_NAME = aws_dynamodb_table.rsvp_table.name
+    }
+  }
 }
 
 resource "aws_sns_topic_subscription" "lambda_subscription" {

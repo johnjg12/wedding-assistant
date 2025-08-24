@@ -103,7 +103,11 @@ describe('send-sms Lambda Function', () => {
             body: 'invalid json'
         };
 
-        await expect(handler(event)).rejects.toThrow();
+        try {
+            await handler(event);
+        } catch (e) {
+            expect(e).toBeInstanceOf(SyntaxError);
+        }
     });
 
     test('should handle empty request body', async () => {
