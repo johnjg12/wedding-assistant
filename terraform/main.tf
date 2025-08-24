@@ -10,6 +10,11 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
+  default_tags {
+    tags = {
+      Project = "Wedding"
+    }
+  }
 }
 
 resource "aws_iam_role" "lambda_exec_role" {
